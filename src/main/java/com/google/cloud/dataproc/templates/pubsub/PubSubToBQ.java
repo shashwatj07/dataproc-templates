@@ -139,6 +139,7 @@ public class PubSubToBQ implements BaseTemplate {
       }
 
       LOGGER.info("Writing data to outputPath: {}", pubSubBQOutputTable);
+      stream.repartition(2);
       writeToBQ(stream, inputProjectID, pubSubBQOutputDataset, pubSubBQOutputTable, batchSize);
 
       jsc.start();
