@@ -27,7 +27,7 @@ check_required_envvar GCP_PROJECT
 check_required_envvar REGION
 check_required_envvar GCS_STAGING_LOCATION
 
-python ${PROJECT_ROOT_DIR}/setup.py bdist_egg --output=$PACKAGE_EGG_FILE
+python3 ${PROJECT_ROOT_DIR}/setup.py bdist_egg --output=$PACKAGE_EGG_FILE
 
 OPT_PROJECT="--project=${GCP_PROJECT}"
 OPT_REGION="--region=${REGION}"
@@ -56,6 +56,40 @@ if [ -n "${PY_FILES}" ]; then
   OPT_FILES="${OPT_PY_FILES},${PY_FILES}"
 fi
 
+echo "Third argument is here"
+echo $3
+
+if [[ "$3" == *"HIVETOBIGQUERY"* ]]; then
+  echo "Inside HIVETOBIGQUERY TEMPLATE"
+  echo ${PROJECT_ROOT_DIR}
+
+  command=$(cat << EOF
+  gcloud beta dataproc batches submit pyspark \
+              /home/shubu/dataproc-templates/python/dataproc_templates/hive/gettablelist.py \
+              ${OPT_PROJECT} \
+              ${OPT_REGION} \
+              ${OPT_JARS} \
+              ${OPT_LABELS} \
+              ${OPT_DEPS_BUCKET} \
+              ${OPT_FILES} \
+              ${OPT_PY_FILES} \
+              ${OPT_PROPERTIES} \
+              ${OPT_SUBNET} \
+              ${OPT_HISTORY_SERVER_CLUSTER} \
+              ${OPT_METASTORE_SERVICE}
+EOF
+)
+
+echo "Triggering Spark Submit job to get table list"
+echo ${command} "$@"
+#${command} "$@"
+# job_status=$?
+echo $?
+bucket_id=$(echo ${OPT_DEPS_BUCKET} | cut -d "=" -f 2)
+dir=$(echo $4 | cut -d "=" -f 2)
+path=$bucket_id"/"$dir"/*.csv"
+echo $path
+gsutil cp $path tablesfile.csv
 
 command=$(cat << EOF
 gcloud beta dataproc batches submit pyspark \
@@ -73,7 +107,48 @@ gcloud beta dataproc batches submit pyspark \
     ${OPT_METASTORE_SERVICE}
 EOF
 )
+command2=$(echo ${command} "$@")
+echo $command2
+
+    if [ $? == 0 ]
+    then
+    echo "inside if"
+    declare -A tableslist=( )
+    while read -r line
+    do 
+    tableslist[$line]=999
+    done < tablesfile.csv
+    
+    for key in "${!tableslist[@]}"; do
+    echo "$key"
+    final_command="${command2} --hive.bigquery.input.table=${key} --hive.bigquery.output.table=${key}"
+    echo $final_command
+    done
+
+    else
+    echo "Could not get table list"
+    fi
+
+else
+command=$(cat << EOF
+gcloud beta dataproc batches submit pyspark \
+    ${PROJECT_ROOT_DIR}/main.py \
+    ${OPT_PROJECT} \
+    ${OPT_REGION} \
+    ${OPT_JARS} \
+    ${OPT_LABELS} \
+    ${OPT_DEPS_BUCKET} \
+    ${OPT_FILES} \
+    ${OPT_PY_FILES} \
+    ${OPT_PROPERTIES} \
+    ${OPT_SUBNET} \
+    ${OPT_HISTORY_SERVER_CLUSTER} \
+    ${OPT_METASTORE_SERVICE}
+EOF
+)
+
 
 echo "Triggering Spark Submit job"
 echo ${command} "$@"
 ${command} "$@"
+fi

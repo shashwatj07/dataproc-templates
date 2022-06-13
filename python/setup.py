@@ -22,7 +22,7 @@ class BdistEggCustomEggName(bdist_egg):
     If it's provided, the egg artifact is renamed after it's built.
     """
 
-    description: str = 'create an "egg" distrubution, optionally renaming the output .egg file'
+    description = """create an "egg" distrubution, optionally renaming the output .egg file"""
 
     user_options = [('output=', 'o', 'output file name')] + bdist_egg.user_options
 
