@@ -60,23 +60,10 @@ def parse_args(args: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     )
 
     parser.add_argument(
-        f'--{constants.HIVE_BQ_INPUT_TABLE}',
-        dest=constants.HIVE_BQ_INPUT_TABLE,
-        required=True,
-        help='Hive table for importing data to BigQuery'
-    )
-    parser.add_argument(
         f'--{constants.HIVE_BQ_OUTPUT_DATASET}',
         dest=constants.HIVE_BQ_OUTPUT_DATASET,
         required=True,
         help='BigQuery dataset for the output table'
-    )
-
-    parser.add_argument(
-        f'--{constants.HIVE_BQ_OUTPUT_TABLE}',
-        dest=constants.HIVE_BQ_OUTPUT_TABLE,
-        required=True,
-        help='BigQuery output table name'
     )
 
     parser.add_argument(
@@ -136,7 +123,6 @@ def run_template() -> None:
         spark: SparkSession = create_spark_session()
         df=spark.sql("show tables in {}".format(hive_database))
         df.select("tableName").coalesce(1).write.mode("overwrite").csv("gs://"+temp_bucket+"/"+hive_database)
-        df.select("tableName").coalesce(1).write.mode("overwrite").csv("csfile")
         df.show()
 
     except Exception:

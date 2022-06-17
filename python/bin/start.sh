@@ -56,13 +56,7 @@ if [ -n "${PY_FILES}" ]; then
   OPT_FILES="${OPT_PY_FILES},${PY_FILES}"
 fi
 
-echo "Third argument is here"
-echo $3
-
 if [[ "$3" == *"HIVETOBIGQUERY"* ]]; then
-  echo "Inside HIVETOBIGQUERY TEMPLATE"
-  echo ${PROJECT_ROOT_DIR}
-
   command=$(cat << EOF
   gcloud beta dataproc batches submit pyspark \
               /home/shubu/dataproc-templates/python/dataproc_templates/hive/gettablelist.py \
@@ -83,13 +77,14 @@ EOF
 echo "Triggering Spark Submit job to get table list"
 echo ${command} "$@"
 #${command} "$@"
-# job_status=$?
-echo $?
+job_status=$?
 bucket_id=$(echo ${OPT_DEPS_BUCKET} | cut -d "=" -f 2)
 dir=$(echo $4 | cut -d "=" -f 2)
-path=$bucket_id"/"$dir"/*.csv"
-echo $path
-gsutil cp $path tablesfile.csv
+table_list_path=$bucket_id"/"$dir"/*.csv"
+tablesfile="tablesfile_"$dir"_"$(date +%s)".log"
+echo $tablesfile
+gsutil cp $table_list_path tablesfile
+log_path=$bucket_id"/"$dir"/"
 
 command=$(cat << EOF
 gcloud beta dataproc batches submit pyspark \
@@ -108,26 +103,29 @@ gcloud beta dataproc batches submit pyspark \
 EOF
 )
 command2=$(echo ${command} "$@")
-echo $command2
 
-    if [ $? == 0 ]
+    if [ $job_status == 0 ]
     then
-    echo "inside if"
-    declare -A tableslist=( )
-    while read -r line
-    do 
-    tableslist[$line]=999
-    done < tablesfile.csv
-    
-    for key in "${!tableslist[@]}"; do
-    echo "$key"
-    final_command="${command2} --hive.bigquery.input.table=${key} --hive.bigquery.output.table=${key}"
-    echo $final_command
+    readarray -t array < tablesfile
+    parallel_jobs=2
+    arraylen=${#array[@]}
+    (( result=(arraylen+parallel_jobs-1)/parallel_jobs ))
+    for((i=0; i < $arraylen; i+=result))
+    do
+    part=( "${array[@]:i:result}" )
+    tablearray=("$(IFS=,; echo "${part[*]}")" )
+    final_command="${command2} --hive.bigquery.input.table=${tablearray} --properties=spark.dataproc.driver.disk.size=5g	"
+    echo ${final_command}
+    timestamp=$(date +%s)
+    rep_log_path=$timestamp"_$i""_output.log"
+    echo $rep_log_path
+    ${final_command} > $rep_log_path  2>&1 &
     done
-
     else
     echo "Could not get table list"
     fi
+    # move log files to S3 location check for batch finished line
+    #gsutil mv *.log log_path
 
 else
 command=$(cat << EOF
@@ -146,7 +144,6 @@ gcloud beta dataproc batches submit pyspark \
     ${OPT_METASTORE_SERVICE}
 EOF
 )
-
 
 echo "Triggering Spark Submit job"
 echo ${command} "$@"

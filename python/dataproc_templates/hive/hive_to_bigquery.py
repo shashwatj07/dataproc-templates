@@ -55,13 +55,6 @@ class HiveToBigQueryTemplate(BaseTemplate):
         )
 
         parser.add_argument(
-            f'--{constants.HIVE_BQ_OUTPUT_TABLE}',
-            dest=constants.HIVE_BQ_OUTPUT_TABLE,
-            required=True,
-            help='BigQuery output table name'
-        )
-
-        parser.add_argument(
             f'--{constants.HIVE_BQ_LD_TEMP_BUCKET_NAME}',
             dest=constants.HIVE_BQ_LD_TEMP_BUCKET_NAME,
             required=True,
@@ -99,7 +92,6 @@ class HiveToBigQueryTemplate(BaseTemplate):
         hive_database: str = args[constants.HIVE_BQ_INPUT_DATABASE]
         hive_table: str = args[constants.HIVE_BQ_INPUT_TABLE]
         bigquery_dataset: str = args[constants.HIVE_BQ_OUTPUT_DATASET]
-        bigquery_table: str = args[constants.HIVE_BQ_OUTPUT_TABLE]
         bq_temp_bucket: str = args[constants.HIVE_BQ_LD_TEMP_BUCKET_NAME]
         output_mode: str = args[constants.HIVE_BQ_OUTPUT_MODE]
 
@@ -108,13 +100,14 @@ class HiveToBigQueryTemplate(BaseTemplate):
             f"{pprint.pformat(args)}"
         )
 
-        # Read
-        input_data = spark.table(hive_database + "." + hive_table)
-
+        for i in hive_table.split(","):
+            print("Loading Table :"+i)
+         # Read
+            input_data = spark.table(hive_database + "." + i)
         # Write
-        input_data.write \
-            .format(constants.FORMAT_BIGQUERY) \
-            .option(constants.TABLE, bigquery_dataset + "." + bigquery_table) \
-            .option(constants.TEMP_GCS_BUCKET, bq_temp_bucket) \
-            .mode(output_mode) \
-            .save()
+            input_data.write \
+                .format(constants.FORMAT_BIGQUERY) \
+                .option(constants.TABLE, bigquery_dataset + "." + i) \
+                .option(constants.TEMP_GCS_BUCKET, bq_temp_bucket) \
+                .mode(output_mode) \
+                .save()
