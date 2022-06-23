@@ -112,17 +112,13 @@ def run_template() -> None:
 #    LOGGER.info('Running template %s', template_name.value)
 
     try:
-        print("Inside try catch")
         args: Dict[str, Any] = parse_args()
         hive_database: str = args[constants.HIVE_BQ_INPUT_DATABASE]
-        print(hive_database)
-
         temp_bucket: str = args[constants.HIVE_BQ_LD_TEMP_BUCKET_NAME]
-        print(temp_bucket)
-
         spark: SparkSession = create_spark_session()
         df=spark.sql("show tables in {}".format(hive_database))
         df.select("tableName").coalesce(1).write.mode("overwrite").csv("gs://"+temp_bucket+"/"+hive_database)
+        print("Tables to Migrate")
         df.show()
 
     except Exception:

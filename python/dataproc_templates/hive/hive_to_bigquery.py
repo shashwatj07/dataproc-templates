@@ -16,9 +16,9 @@ from typing import Dict, Sequence, Optional, Any
 from logging import Logger
 import argparse
 import pprint
-
+import pandas as pd
 from pyspark.sql import SparkSession
-
+import datetime
 from dataproc_templates import BaseTemplate
 import dataproc_templates.util.template_constants as constants
 
@@ -48,6 +48,13 @@ class HiveToBigQueryTemplate(BaseTemplate):
             help='Hive table for importing data to BigQuery'
         )
         parser.add_argument(
+            f'--{constants.HIVE_BQ_TABLES_TO_MIGRATE}',
+            dest=constants.HIVE_BQ_TABLES_TO_MIGRATE,
+            required=True,
+            help='Hive table for importing data to BigQuery'
+        )
+
+        parser.add_argument(
             f'--{constants.HIVE_BQ_OUTPUT_DATASET}',
             dest=constants.HIVE_BQ_OUTPUT_DATASET,
             required=True,
@@ -60,6 +67,14 @@ class HiveToBigQueryTemplate(BaseTemplate):
             required=True,
             help='Spark BigQuery connector temporary bucket'
         )
+
+        parser.add_argument(
+            f'--migration_id',
+            dest="migration_id",
+            default='00000000',
+            help='Randomly generated id for every job'
+        )
+
 
         parser.add_argument(
             f'--{constants.HIVE_BQ_OUTPUT_MODE}',
@@ -87,6 +102,8 @@ class HiveToBigQueryTemplate(BaseTemplate):
     def run(self, spark: SparkSession, args: Dict[str, Any]) -> None:
 
         logger: Logger = self.get_logger(spark=spark)
+        audit_df = pd.DataFrame(columns=["Migration_id","Source_DB_Name","Source_Table_Name","Target_DB_Name","Target_Table_Name","Job_Start_Time","Job_End_Time","Job_Status"])
+        dict={}
 
         # Arguments
         hive_database: str = args[constants.HIVE_BQ_INPUT_DATABASE]
@@ -94,20 +111,49 @@ class HiveToBigQueryTemplate(BaseTemplate):
         bigquery_dataset: str = args[constants.HIVE_BQ_OUTPUT_DATASET]
         bq_temp_bucket: str = args[constants.HIVE_BQ_LD_TEMP_BUCKET_NAME]
         output_mode: str = args[constants.HIVE_BQ_OUTPUT_MODE]
+        hive_tables_to_migrate: str = args[constants.HIVE_BQ_TABLES_TO_MIGRATE]
+        migration_id: str = args["migration_id"]
 
         logger.info(
             "Starting Hive to Bigquery spark job with parameters:\n"
             f"{pprint.pformat(args)}"
         )
 
-        for i in hive_table.split(","):
-            print("Loading Table :"+i)
-         # Read
-            input_data = spark.table(hive_database + "." + i)
-        # Write
-            input_data.write \
-                .format(constants.FORMAT_BIGQUERY) \
-                .option(constants.TABLE, bigquery_dataset + "." + i) \
-                .option(constants.TEMP_GCS_BUCKET, bq_temp_bucket) \
-                .mode(output_mode) \
-                .save()
+        for tbl in hive_table.split(","):
+
+            if hive_tables_to_migrate=="*" or tbl.lower() in hive_tables_to_migrate.lower().split(","):
+                
+                dict["Migration_id"]=migration_id
+                dict["Source_DB_Name"]=hive_database
+                dict["Source_Table_Name"]=tbl
+                dict["Target_DB_Name"]=bigquery_dataset
+                dict["Target_Table_Name"]=tbl
+                dict["Job_Start_Time"]=str(datetime.datetime.now())
+    
+                try:
+                    print("Loading Table :"+tbl)
+                 # Read
+                    input_data = spark.table(hive_database + "." + tbl)
+                 # Write
+                    input_data.write \
+                        .format(constants.FORMAT_BIGQUERY) \
+                        .option(constants.TABLE, bigquery_dataset + "." + tbl) \
+                        .option(constants.TEMP_GCS_BUCKET, bq_temp_bucket) \
+                        .mode(output_mode) \
+                        .save()
+                except Exception as e:
+                    print(str(e))
+                    dict["Job_Status"]="Fail"
+                    dict["Job_End_Time"]=str(datetime.datetime.now())
+                else:
+                    print("Table {} loaded".format(tbl))
+                    dict["Job_Status"]="Pass"
+                    dict["Job_End_Time"]=str(datetime.datetime.now())
+                audit_df=audit_df.append(dict, ignore_index = True)
+        
+        #save audit df to GCS
+        print(audit_df)
+        newdf=spark.createDataFrame(audit_df)
+        newdf.show()
+        newdf.coalesce(1).write.mode("append").csv("gs://"+bq_temp_bucket+"/audit") 
+
