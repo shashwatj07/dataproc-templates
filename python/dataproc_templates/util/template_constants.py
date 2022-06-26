@@ -55,7 +55,7 @@ HIVE_BQ_OUTPUT_DATASET = "hive.bigquery.output.dataset"
 HIVE_BQ_OUTPUT_TABLE = "hive.bigquery.output.table"
 HIVE_BQ_INPUT_DATABASE="hive.bigquery.input.database"
 HIVE_BQ_INPUT_TABLE="hive.bigquery.input.table"
-HIVE_BQ_TABLES_TO_MIGRATE="hive.bigquery.input.tables"
+HIVE_DATABASE_ALL_TABLES="hive.database.all.tables"
 
 # Hive to GCS
 HIVE_GCS_INPUT_DATABASE="hive.gcs.input.database"

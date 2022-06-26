@@ -118,8 +118,6 @@ def run_template() -> None:
         spark: SparkSession = create_spark_session()
         df=spark.sql("show tables in {}".format(hive_database))
         df.select("tableName").coalesce(1).write.mode("overwrite").csv("gs://"+temp_bucket+"/"+hive_database)
-        print("Tables to Migrate")
-        df.show()
 
     except Exception:
         LOGGER.exception(

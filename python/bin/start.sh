@@ -64,7 +64,7 @@ fi
 if [[ "$3" == *"HIVETOBIGQUERY"* ]]; then
   command=$(cat << EOF
   gcloud beta dataproc batches submit pyspark \
-              ${PROJECT_ROOT_DIR}/dataproc_templates/hive/gettablelist.py \
+              ${PROJECT_ROOT_DIR}/dataproc_templates/hive/get_hive_tables.py \
               ${OPT_PROJECT} \
               ${OPT_REGION} \
               ${OPT_JARS} \
@@ -88,8 +88,6 @@ tablesfile="tablesfile_"$dir"_"$(date +%s)".txt"
 gsutil cp $table_list_path $tablesfile
 s3_log_path=$bucket_id"/logs/"$dir"/"
 mkdir -p logs
-tablesfile="tables.txt"
-echo $tablesfile
 command=$(cat << EOF
 gcloud beta dataproc batches submit pyspark \
     ${PROJECT_ROOT_DIR}/main.py \
@@ -111,15 +109,15 @@ command2=$(echo ${command} "$@")
     if [ $job_status == 0 ]
     then
     migration_id=$RANDOM$RANDOM$RANDOM
-    readarray -t array < $tablesfile
+    readarray -t tables_list < $tablesfile
     parallel_jobs=$MAX_PARALLELISM
-    arraylen=${#array[@]}
+    arraylen=${#tables_list[@]}
     (( result=(arraylen+parallel_jobs-1)/parallel_jobs ))
     for((i=0; i < $arraylen; i+=result))
     do
-    part=( "${array[@]:i:result}" )
+    part=( "${tables_list[@]:i:result}" )
     tablearray=("$(IFS=,; echo "${part[*]}")" )
-    final_command="${command2} --hive.bigquery.input.table=${tablearray} --migration_id=$migration_id --properties=spark.dataproc.driver.disk.size=5g"
+    final_command="${command2} --hive.database.all.tables=${tablearray} --migration_id=$migration_id --properties=spark.dataproc.driver.disk.size=5g"
     echo ${final_command}
     timestamp=$(date +%s)
     rep_log_path="logs/logs_"$migration_id"_"$timestamp"_$i""_output.log"
@@ -132,7 +130,7 @@ command2=$(echo ${command} "$@")
     echo $tablesfile
     rm -r $tablesfile
     #move log files to S3 location check for batch finished line
-    # need to move only when the job is complete
+    # TODO: need to move only when the job is complete
     gsutil mv logs/ $GCS_STAGING_LOCATION
 
 else

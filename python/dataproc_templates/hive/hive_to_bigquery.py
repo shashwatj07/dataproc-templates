@@ -48,8 +48,8 @@ class HiveToBigQueryTemplate(BaseTemplate):
             help='Hive table for importing data to BigQuery'
         )
         parser.add_argument(
-            f'--{constants.HIVE_BQ_TABLES_TO_MIGRATE}',
-            dest=constants.HIVE_BQ_TABLES_TO_MIGRATE,
+            f'--{constants.HIVE_DATABASE_ALL_TABLES}',
+            dest=constants.HIVE_DATABASE_ALL_TABLES,
             required=True,
             help='Hive table for importing data to BigQuery'
         )
@@ -103,7 +103,7 @@ class HiveToBigQueryTemplate(BaseTemplate):
 
         logger: Logger = self.get_logger(spark=spark)
         audit_df = pd.DataFrame(columns=["Migration_id","Source_DB_Name","Source_Table_Name","Target_DB_Name","Target_Table_Name","Job_Start_Time","Job_End_Time","Job_Status"])
-        dict={}
+        audit_dict={}
 
         # Arguments
         hive_database: str = args[constants.HIVE_BQ_INPUT_DATABASE]
@@ -111,7 +111,7 @@ class HiveToBigQueryTemplate(BaseTemplate):
         bigquery_dataset: str = args[constants.HIVE_BQ_OUTPUT_DATASET]
         bq_temp_bucket: str = args[constants.HIVE_BQ_LD_TEMP_BUCKET_NAME]
         output_mode: str = args[constants.HIVE_BQ_OUTPUT_MODE]
-        hive_tables_to_migrate: str = args[constants.HIVE_BQ_TABLES_TO_MIGRATE]
+        hive_database_all_tables: str = args[constants.HIVE_DATABASE_ALL_TABLES]
         migration_id: str = args["migration_id"]
 
         logger.info(
@@ -119,16 +119,17 @@ class HiveToBigQueryTemplate(BaseTemplate):
             f"{pprint.pformat(args)}"
         )
 
-        for tbl in hive_table.split(","):
+        for tbl in hive_database_all_tables.split(","):
 
-            if hive_tables_to_migrate=="*" or tbl.lower() in hive_tables_to_migrate.lower().split(","):
+            if hive_table=="*" or tbl.lower() in hive_table.lower().split(","):
                 
-                dict["Migration_id"]=migration_id
-                dict["Source_DB_Name"]=hive_database
-                dict["Source_Table_Name"]=tbl
-                dict["Target_DB_Name"]=bigquery_dataset
-                dict["Target_Table_Name"]=tbl
-                dict["Job_Start_Time"]=str(datetime.datetime.now())
+                print("Loading Table: "+tbl)
+                audit_dict["Migration_id"]=migration_id
+                audit_dict["Source_DB_Name"]=hive_database
+                audit_dict["Source_Table_Name"]=tbl
+                audit_dict["Target_DB_Name"]=bigquery_dataset
+                audit_dict["Target_Table_Name"]=tbl
+                audit_dict["Job_Start_Time"]=str(datetime.datetime.now())
     
                 try:
                     print("Loading Table :"+tbl)
@@ -143,17 +144,23 @@ class HiveToBigQueryTemplate(BaseTemplate):
                         .save()
                 except Exception as e:
                     print(str(e))
-                    dict["Job_Status"]="Fail"
-                    dict["Job_End_Time"]=str(datetime.datetime.now())
+                    audit_dict["Job_Status"]="Fail"
+                    audit_dict["Job_End_Time"]=str(datetime.datetime.now())
                 else:
                     print("Table {} loaded".format(tbl))
-                    dict["Job_Status"]="Pass"
-                    dict["Job_End_Time"]=str(datetime.datetime.now())
-                audit_df=audit_df.append(dict, ignore_index = True)
+                    audit_dict["Job_Status"]="Pass"
+                    audit_dict["Job_End_Time"]=str(datetime.datetime.now())
+                audit_df=audit_df.append(audit_dict, ignore_index = True)
+            
+            else:
+                print("{} Table not present in Hive Database {}".format(tbl,hive_database))
         
         #save audit df to GCS
-        print(audit_df)
-        newdf=spark.createDataFrame(audit_df)
-        newdf.show()
-        newdf.coalesce(1).write.mode("append").csv("gs://"+bq_temp_bucket+"/audit") 
+        if audit_df.empty:
+            print("Audit Dataframe is Empty")
+        else:
+            print(audit_df)
+            newdf=spark.createDataFrame(audit_df)
+            newdf.show()
+            newdf.coalesce(1).write.mode("append").csv("gs://"+bq_temp_bucket+"/audit") 
 
