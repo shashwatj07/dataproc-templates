@@ -60,7 +60,7 @@ if [ -n "${MAX_PARALLELISM}" ]; then
 else
   MAX_PARALLELISM=10
 fi
-
+echo ${OPT_SUBNET}
 if [[ "$3" == *"HIVETOBIGQUERY"* ]]; then
   command=$(cat << EOF
   gcloud beta dataproc batches submit pyspark \
@@ -86,8 +86,8 @@ dir=$(echo $4 | cut -d "=" -f 2)
 table_list_path=$GCS_STAGING_LOCATION"/"$dir"/*.csv"
 tablesfile="tablesfile_"$dir"_"$(date +%s)".txt"
 gsutil cp $table_list_path $tablesfile
-s3_log_path=$bucket_id"/logs/"$dir"/"
 mkdir -p logs
+mkdir -p logs/archive
 command=$(cat << EOF
 gcloud beta dataproc batches submit pyspark \
     ${PROJECT_ROOT_DIR}/main.py \
@@ -131,7 +131,9 @@ command2=$(echo ${command} "$@")
     rm -r $tablesfile
     #move log files to S3 location check for batch finished line
     # TODO: need to move only when the job is complete
-    gsutil mv logs/ $GCS_STAGING_LOCATION
+    #gsutil mv logs/ $GCS_STAGING_LOCATION
+    echo $GCS_STAGING_LOCATION
+    sh ${PROJECT_ROOT_DIR}/dataproc_templates/hive/hivetoBQ_job_monitor.sh $GCS_STAGING_LOCATION
 
 else
 command=$(cat << EOF
